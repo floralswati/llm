@@ -1,0 +1,65 @@
+from google.colab import drive
+drive.mount('/content/drive')
+
+import docx
+import nltk
+nltk.download('punkt')
+from transformers import pipeline
+
+# Path to your .docx file in Google Drive
+file_path = '/content/drive/MyDrive/Colab Notebooks/datasets/a_letter_to_god.docx'
+# Open the .docx file
+doc = docx.Document(file_path)
+
+# Function to split text into sentences
+def split_into_sentences(text):
+    delimiters = ".", "!", "?"
+    default_delimiter = delimiters[0]
+    for delimiter in delimiters[1:]:
+        text = text.replace(delimiter, default_delimiter)
+    return [s.strip() for s in text.split(default_delimiter) if s.strip()]
+
+# Function to split document into chunks
+def split_into_chunks(sentences, tokenizer):
+    length = 0
+    chunk = ""
+    chunks = []
+    for sentence in sentences:
+        combined_length = len(tokenizer.tokenize(sentence)) + length
+        if combined_length <= tokenizer.max_len_single_sentence:
+            chunk += sentence + " "
+            length = combined_length
+        else:
+            chunks.append(chunk.strip())
+            length = 0
+            chunk = ""
+            chunk += sentence + " "
+            length = len(tokenizer.tokenize(sentence))
+    if chunk:
+        chunks.append(chunk.strip())
+    return chunks
+
+# Load the abstractive summarization pipeline with the distilbart model
+summarizer = pipeline("summarization", model="sshleifer/distilbart-cnn-12-6")
+
+# Initialize word count variable
+total_word_count = 0
+
+# Process the document
+sentences = []
+for para in doc.paragraphs:
+    sentences.extend(split_into_sentences(para.text))
+
+chunks = split_into_chunks(sentences, summarizer.tokenizer)
+
+# Generate summary for each chunk and count words
+for chunk in chunks:
+    summary = summarizer(chunk, max_length=150, min_length=40, do_sample=False)
+    summary_text = summary[0]['summary_text']
+    word_count = len(nltk.word_tokenize(summary_text))
+    total_word_count += word_count
+    print("Summary:", summary_text)
+    print("Word Count:", word_count)
+
+# Print total word count
+print("Total Word Count in Summaries:", total_word_count)
